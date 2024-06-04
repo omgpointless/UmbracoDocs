@@ -63,10 +63,6 @@ The above sample uses a GUID value.
 With this approach, you can set different 404 pages for different languages (cultures) - such as `en-us`, `it` etc.
 {% endhint %}
 
-{% hint style="warning" %}
-If you are hosting your site on Umbraco Cloud, using an XPath statement is the best approach. This is because content IDs might differ across Cloud environments.
-{% endhint %}
-
 XPath example:
 
 ```json
@@ -110,6 +106,74 @@ Id example:
 ```
 
 The above example uses an integer Id value.
+
+### Set a custom 404 page using IContentLastChanceFinder
+
+This is an example of how you can set up a 404 error page using `IContentLastChanceFinder`. To learn more about `IContentLastChanceFinder` read the [Custom Routing](../implementation/custom-routing/README.md#last-chance-icontentfinder) article.
+
+Before following this example, follow the  [Create a 404 page in the backoffice](#create-a-404-page-in-the-backoffice) part. This is because this example will use the `Page404` alias of the Document Type to find and display the error page.
+
+1. Create a new `.cs` file called `Error404Page` in your Umbraco project.
+
+2. Add the following code to the newly created class:
+
+{% code title="Error404Page.cs" lineNumbers="true" %}
+
+```csharp
+
+using Umbraco.Cms.Core.Composing;
+using Umbraco.Cms.Core.Routing;
+using Umbraco.Cms.Core.Web;
+
+namespace YourProjectNamespace;
+
+public class Error404Page : IContentLastChanceFinder
+{
+ private readonly IUmbracoContextAccessor _contextAccessor;
+
+ public Error404Page(IUmbracoContextAccessor contextAccessor)
+ {
+  _contextAccessor = contextAccessor;
+ }
+
+ public Task<bool> TryFindContent(IPublishedRequestBuilder request)
+ {
+  // In the rare case that an umbracoContext cannot be build from the request, we will not be able to find the page
+  if (_contextAccessor.TryGetUmbracoContext(out var umbracoContext) == false)
+  {
+   return Task.FromResult(false);
+  }
+
+  // Find the first notFound page at root level through the published content cache by its documentTypeAlias
+  // You can make this search as complex as you want, you can return different pages based on anything in the original request
+  var notFoundPage = umbracoContext.Content?.GetAtRoot().FirstOrDefault(c => c.ContentType.Alias == "Page404");
+  if (notFoundPage == null)
+  {
+   return Task.FromResult(false);
+  }
+
+  // set the content on the request and mark our search as succesfull
+  request.SetPublishedContent(notFoundPage);
+  return Task.FromResult(true); ;
+ }
+}
+
+// ContentFinders need to be registered into the DI container through a composer
+public class Mycomposer : IComposer
+{
+ public void Compose(IUmbracoBuilder builder)
+ {
+  builder.SetContentLastChanceFinder<Error404Page>();
+ }
+}
+
+```
+
+{% endcode %}
+
+{% hint style="info" %}
+If you are hosting your site on Umbraco Cloud, using `IContentLastChanceFinder` is the best approach.
+{% endhint %}
 
 ## Errors with booting a project
 
